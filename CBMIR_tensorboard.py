@@ -521,9 +521,7 @@ class CBMIR():
                     npv.append(total_npv)
 
                 
-                if early_stopping.early_stop:
-                    print("Early stopping",epoch)
-                    break
+                
                 #算時間
                 now_time = int(time.time()-seconds)
                 hr = 0
@@ -576,6 +574,9 @@ class CBMIR():
                             (str(valid_acc_)),
                             (str(valid_loss_))[:7],specificity[-1],sensitivity[-1],auc[-1],
                             cost_time])
+                if early_stopping.early_stop:
+                    print("Early stopping",epoch)
+                    break
 
             print("====== END ==========")
             print(training_accuracy,valid_accuracy,auc,specificity,sensitivity,npv,ppv)
