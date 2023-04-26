@@ -543,7 +543,6 @@ class CBMIR():
             print(training_accuracy,valid_accuracy,auc,specificity,sensitivity,npv,ppv)
 
             return total_train_loss, total_valid_loss, training_accuracy, valid_accuracy,specificity,sensitivity,ppv,npv,auc
-
         #assert os.path.exists(train_path), "dataset train_path: {} does not exist.".format(train_path)
         # 遍历文件夹，一个文件夹对应一个类别
         flower_class = [cla for cla in os.listdir(train_path) if os.path.isdir(os.path.join(train_path, cla))]
