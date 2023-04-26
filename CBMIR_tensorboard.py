@@ -39,6 +39,76 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np 
 
+class EarlyStopping:
+    '''
+    收斂就停止訓練
+    '''
+    def __init__(self, patience=10, delta=0.0, path=str, verbose=False):
+        '''
+        定義類別 EarlyStopping，並在初始化函數中定義類別的屬性。
+
+        patience：表示要等待多少個 epoch 才能判斷損失是否有下降。如果訓練 patience 個 epoch 後，驗證集的損失沒有下降，則停止訓練。
+
+        delta：設定容忍的損失值變化，若驗證集的損失沒有下降超過 delta，就把這個 epoch 視為沒有進步。
+
+        path：保存模型權重的路徑和檔名。
+
+        verbose：表示是否在屏幕上輸出調試訊息。
+
+        counter：計算驗證集損失沒有下降的 epoch 數量。
+
+        best_score：保存最好的驗證集損失。
+
+        early_stop：表示是否停止訓練。
+
+        val_loss_min：保存當前最小的驗證集損失。將其初始化為正無窮。
+        '''
+        self.patience = patience
+        self.delta = delta
+        self.path = path
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+    
+    def __call__(self, val_loss, model):
+        '''
+        在類別中實現了 __call__() 函數，可以讓該類別的對象像函數一樣被調用。
+        當類別對象被調用時，這個函數會被執行。
+        '''
+        #將驗證集損失取負，因為我們希望監控的是損失的下降。
+        score = -val_loss
+        '''
+        如果 best_score 屬性是空的，表示這是第一次調用這個函數，
+        所以將 score 賦值給 best_score，並保存模型權重。
+        '''
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.verbose:
+                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+            
+    def save_checkpoint(self, val_loss, model):
+        '''
+        保存模型權重的函數。如果 verbose 為 True，則在屏幕上輸出一條消息。
+        然後使用 PyTorch 提供的 torch.save() 函數保存模型權重。
+        最後，將當前的驗證集損失賦值給 val_loss_min。
+        '''
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). Saving model...')
+        torch.save(model, self.path)
+        self.val_loss_min = val_loss
+
+
 class CBMIR():
     '''
     train + get_Feature+ retrieve
@@ -406,6 +476,12 @@ class CBMIR():
             npv = []
             CUDA = torch.cuda.is_available()
             device = torch.device("cuda" if CUDA else "cpu")
+            early_stopping = EarlyStopping(patience=5, delta=0.01, path='save.pth')
+
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+
+            #scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
             # Train model
             for epoch in range(num_epochs):
                 # training
@@ -420,6 +496,7 @@ class CBMIR():
                 # validation
                 with torch.no_grad():
                     valid_acc_, valid_loss_,total_auc,total_specificity,total_sensitivity,total_ppv,total_npv= validate(valid_loader , model, criterion, epoch,num_epochs, batch_size)
+                    scheduler.step(valid_loss_)
                     #print(valid_acc_, valid_loss_,total_auc,total_specificity,total_sensitivity,total_ppv,total_npv)
                     #
                     # print(total_auc)
@@ -444,6 +521,10 @@ class CBMIR():
                     ppv.append(total_ppv)
                     npv.append(total_npv)
 
+                
+                if early_stopping.early_stop:
+                    print("Early stopping",epoch)
+                    break
                 #算時間
                 now_time = int(time.time()-seconds)
                 hr = 0
@@ -2467,11 +2548,11 @@ for i in range(1):
     cb = CBMIR(i)
     cb.data_path = " input_data\\" 
     cb.repeat_times = i
-    cb.save_path="x"+str(i)
+    cb.save_path="early_stop_test"+str(i)
     cb.train_typee = ['finetune']
-    cb.model_listt=['densenet']
+    cb.model_listt=['swin_vit']
     cb.path_listt=['S']
-    cb.num_epochs =1
+    cb.num_epochs =9999
     cb.batch_size = 16
     cb.top_list = [10]
     cb.K = 5
