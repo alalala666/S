@@ -228,15 +228,15 @@ class CBMIR():
             return model
 
 
-        def train(train_loader, model, criterion, epoch, num_epochs, batch_size):
+        def train(train_loader, model,optimizer, criterion, epoch, num_epochs, batch_size):
             model.train()
             total_train = 0
             correct_train = 0
             train_loss = 0
 
-            lr = 0.01 #* (1/2)
+            #lr = 0.01 #* (1/2)
 
-            optimizer = optim.SGD(model.parameters(), lr= lr)
+            #optimizer = optim.SGD(model.parameters(), lr= lr)
             # from torch.optim.lr_scheduler import StepLR
             # scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
             # 定义损失函数和优化器
@@ -271,8 +271,8 @@ class CBMIR():
                 train_loss += loss.item()
 
                 if batch_idx % 1 == 0:
-                    print("Train Epoch: {}/{} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
-                    epoch+1, num_epochs, batch_idx+1, len(train_loader),
+                    print("Train Epoch: {} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
+                    epoch, batch_idx+1, len(train_loader),
                     correct_train / float((batch_idx + 1) * batch_size),
                     train_loss / float((batch_idx + 1) * batch_size)))
                 count+=1
@@ -330,8 +330,8 @@ class CBMIR():
 
                 if batch_idx % 1 == 0:
                     count+=1
-                    print("Valid Epoch: {}/{} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
-                    epoch+1, num_epochs, batch_idx+1, len(valid_loader),
+                    print("Valid Epoch: {} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
+                    epoch,  batch_idx+1, len(valid_loader),
                     correct_valid / float((batch_idx + 1) * batch_size),
                     valid_loss / float((batch_idx + 1) * batch_size)))
                 
@@ -382,22 +382,7 @@ class CBMIR():
                 ##########################################################################
                 # PPV NPV
                 ##########################################################################
-                # import sklearn.metrics as metrics
-                # #print((target.cpu().numpy()))
-                # a = torch.tensor(((target.cpu().numpy())))
-                # b = torch.tensor(((predict.cpu().numpy())))
-                # #print(a,b)
-                # #cm = metrics.confusion_matrix((a),predicted.cpu().numpy())
-                # # 计算PPV和NPV
-                # true_positives = (b * a).sum()
-                # predicted_positives = b.sum()
-                # PPV = true_positives / predicted_positives
-                # # PPV = cm[1, 1] / (cm[1, 1] + cm[0, 1])
-                # true_negatives = ((1-a) * (1-b)).sum()
-                # predicted_negatives = (1-b).sum()
-                # NPV =  true_negatives / predicted_negatives
-                # NPV = cm[0, 0] / (cm[0, 0] + cm[1, 0])
-                #(predict.cpu(), target.cpu())
+
                 precision = torchmetrics.functional.classification.multiclass_precision(predict.cpu(), target.cpu(), num_classes) 
                 recall = torchmetrics.functional.classification.multiclass_recall(predict.cpu(), target.cpu(), num_classes) 
                 total_ppv +=  torch.tensor(precision)#PPV
@@ -423,7 +408,8 @@ class CBMIR():
             total_ppv = 100 *float("{:.2f}".format(total_ppv))
             total_npv =100 *float( "{:.2f}".format(total_npv))
 
-    
+            if not os.path.exists(save_path + '\\' + str(fold)):
+                os.makedirs(save_path + '\\' + str(fold))
             #print(top5_correct/self.batch_size)
             #assert False
             #print(roc_target.shape,roc_predicted.shape)
@@ -460,9 +446,6 @@ class CBMIR():
 
 
         def training_loop(model, criterion, train_loader, valid_loader, seconds, csv_name, num_epochs, batch_size,fold,save_path):
-            # set objects for storing metrics
-            maxx = 0
-            ccount = 0
             total_train_loss = []
             total_valid_loss = []
             total_train_accuracy = []
@@ -476,39 +459,25 @@ class CBMIR():
             npv = []
             CUDA = torch.cuda.is_available()
             device = torch.device("cuda" if CUDA else "cpu")
-            early_stopping = EarlyStopping(patience=5, delta=0.01, path='save.pth')
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+            early_stopping = EarlyStopping(patience=10, delta=0.00001, path='save.pth')
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
 
-            #scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
+            #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
             # Train model
-            for epoch in range(num_epochs):
+            for epoch in range(1,9999):
                 # training
-                train_acc_, train_loss_ = train(train_loader, model, criterion, epoch, num_epochs, batch_size)
+                self.num_epochs = epoch
+                num_epochs = self.num_epochs
+                train_acc_, train_loss_ = train(train_loader, model,optimizer, criterion, epoch, num_epochs, batch_size)
                 total_train_loss.append(train_loss_)
                 total_train_accuracy.append(train_acc_)
                 formatted = "{:.2f}".format(train_acc_)
                 training_accuracy.append(float(formatted))
-                
-
 
                 # validation
                 with torch.no_grad():
                     valid_acc_, valid_loss_,total_auc,total_specificity,total_sensitivity,total_ppv,total_npv= validate(valid_loader , model, criterion, epoch,num_epochs, batch_size)
-                    scheduler.step(valid_loss_)
-                    #print(valid_acc_, valid_loss_,total_auc,total_specificity,total_sensitivity,total_ppv,total_npv)
-                    #
-                    # print(total_auc)
-                    # assert False
-                    # ##自動停止
-                    # if maxx == 0:
-                    #     maxx =valid_acc_
-                    # elif valid_acc_ > maxx:
-                    #     maxx = valid_acc_
-                    # else :
-                    #     ccount = ccount + 1
-                    # if ccount == 3:
-                    #     return total_train_loss, total_valid_loss, total_train_accuracy, total_valid_accuracy
 
                     total_valid_loss.append(valid_loss_)
                     total_valid_accuracy.append(valid_acc_)
@@ -519,9 +488,7 @@ class CBMIR():
                     sensitivity.append(total_sensitivity)
                     ppv.append(total_ppv)
                     npv.append(total_npv)
-
-                
-                
+ 
                 #算時間
                 now_time = int(time.time()-seconds)
                 hr = 0
@@ -550,22 +517,18 @@ class CBMIR():
 
 
                 print('================================================================================================================================')
-                print("Epoch: {}/{}， Train acc： {:.6f}， Train loss： {:.6f}， Valid acc： {:.6f}， Valid loss： {:.6f}， Time： {}".format(
-                    epoch+1, num_epochs, 
+                print("Epoch: {}， Train acc： {:.6f}， Train loss： {:.6f}， Valid acc： {:.6f}， Valid loss： {:.6f}， Time： {}".format(
+                    epoch, 
                     train_acc_, train_loss_,
                     valid_acc_, valid_loss_,cost_time))
                 print('================================================================================================================================')
                 #寫入訓練資料
-                print(epoch,num_epochs)
-                if epoch == num_epochs-1:
-                    # with open(csv_name, 'a+', newline='') as csvfile:
-                    #     writer = csv.writer (csvfile)
-                    #     writer.writerow(["fold", "num_epochs", 
-                    #         (str("train_acc_")),
-                    #         (str("train_loss_")),
-                    #         (str("valid_acc_")),
-                    #         (str("valid_loss_")),"specificity","sensitivity","auc",
-                    #         "cost_time"])
+
+                early_stopping(valid_loss_, model)
+                scheduler.step(valid_loss_)
+                print("Early stopping",epoch,early_stopping.early_stop)
+                if early_stopping.early_stop:
+                    print("Early stopping",epoch)
                     with open(csv_name, 'a+', newline='') as csvfile:
                         writer = csv.writer (csvfile)
                         writer.writerow([fold, num_epochs, 
@@ -574,72 +537,11 @@ class CBMIR():
                             (str(valid_acc_)),
                             (str(valid_loss_))[:7],specificity[-1],sensitivity[-1],auc[-1],
                             cost_time])
-                if early_stopping.early_stop:
-                    print("Early stopping",epoch)
                     break
 
             print("====== END ==========")
             print(training_accuracy,valid_accuracy,auc,specificity,sensitivity,npv,ppv)
 
-            #assert False#total_sensitivity,total_ppv,total_npv
-            # 畫出訓練準確率和測試準確率的折線圖
-            import matplotlib.pyplot as plt
-            from matplotlib.ticker import MaxNLocator
-            #print(training_accuracy,valid_accuracy)
-            plt.plot(range(1, num_epochs+1),training_accuracy, label='Train Accuracy')
-            plt.plot(range(1, num_epochs+1),valid_accuracy, label='Test Accuracy')
-            plt.plot(range(1, num_epochs+1),auc, label='auc')
-            plt.plot(range(1, num_epochs+1),specificity, label='specificity')
-            plt.plot(range(1, num_epochs+1),sensitivity, label='sensitivity')
-            plt.plot(range(1, num_epochs+1),ppv, label='ppv')
-            plt.plot(range(1, num_epochs+1),npv, label='npv')
-            plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-            plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
-            # 設定 X 軸標籤
-            plt.xlabel('Epoch')
-            # 設定 Y 軸標籤
-            plt.ylabel('Accuracy')
-            # 設定圖形標題
-            plt.title('Train and Test Accuracy')
-            # 加入圖例
-            plt.legend()
-            # 顯示圖形
-            #plt.show()
-            if not os.path.exists(save_path + '\\' + str(fold)):
-                os.makedirs(save_path + '\\' + str(fold))
-            plt.savefig(save_path + '\\' + str(fold) + '\\figure.png')
-            plt.clf()
-                        #assert False#total_sensitivity,total_ppv,total_npv
-            # 畫出訓練準確率和測試準確率的折線圖
-            import matplotlib.pyplot as plt
-            from matplotlib.ticker import MaxNLocator
-            plt.plot(range(1, num_epochs+1),training_accuracy, label='Train Accuracy')
-            plt.plot(range(1, num_epochs+1),valid_accuracy, label='Test Accuracy')
-            plt.plot(range(1, num_epochs+1),auc, label='auc')
-            plt.plot(range(1, num_epochs+1),specificity, label='specificity')
-            plt.plot(range(1, num_epochs+1),sensitivity, label='sensitivity')
-            # plt.plot(range(1, num_epochs+1),ppv, label='ppv')
-            # plt.plot(range(1, num_epochs+1),npv, label='npv')
-            plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-            plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
-            # 設定 X 軸標籤
-            plt.xlabel('Epoch')
-            # 設定 Y 軸標籤
-            plt.ylabel('Accuracy')
-            # 設定圖形標題
-            plt.title('Train and Test Accuracy')
-            # 加入圖例
-            plt.legend()
-            # 顯示圖形
-            #plt.show()
-            if not os.path.exists(save_path + '\\' + str(fold)):
-                os.makedirs(save_path + '\\' + str(fold))
-            plt.savefig(save_path + '\\' + str(fold) + '\\figure2.png')
-            plt.clf()
-            plt.close('all')
-            #assert False
-            print( training_accuracy[-1], valid_accuracy[-1])
-            print( type(train_acc_), type(valid_acc_)) 
             return total_train_loss, total_valid_loss, training_accuracy, valid_accuracy,specificity,sensitivity,ppv,npv,auc
 
         #assert os.path.exists(train_path), "dataset train_path: {} does not exist.".format(train_path)
@@ -855,7 +757,7 @@ class CBMIR():
 
                 if batch_idx % 1 == 0:
                     print("Train Epoch: {}/{} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
-                    epoch+1, num_epochs, batch_idx+1, len(train_loader),
+                    epoch, num_epochs, batch_idx+1, len(train_loader),
                     correct_train / float((batch_idx + 1) * batch_size),
                     train_loss / float((batch_idx + 1) * batch_size)))
                 count+=1
@@ -913,8 +815,8 @@ class CBMIR():
 
                 if batch_idx % 1 == 0:
                     count+=1
-                    print("Valid Epoch: {}/{} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
-                    epoch+1, num_epochs, batch_idx+1, len(valid_loader),
+                    print("Valid Epoch: {} [iter： {}/{}], acc： {:.6f}, loss： {:.6f}".format(
+                    epoch, batch_idx+1, len(valid_loader),
                     correct_valid / float((batch_idx + 1) * batch_size),
                     valid_loss / float((batch_idx + 1) * batch_size)))
                 
@@ -1005,7 +907,9 @@ class CBMIR():
             total_sensitivity = 100 *float("{:.2f}".format(total_sensitivity))
             total_ppv = 100 *float("{:.2f}".format(total_ppv))
             total_npv =100 *float( "{:.2f}".format(total_npv))
-
+            
+            if not os.path.exists(save_path + '\\' + str(fold)):
+                os.makedirs(save_path + '\\' + str(fold))
     
             #print(top5_correct/self.batch_size)
             #assert False
@@ -1125,8 +1029,8 @@ class CBMIR():
 
 
                 print('================================================================================================================================')
-                print("Epoch: {}/{}， Train acc： {:.6f}， Train loss： {:.6f}， Valid acc： {:.6f}， Valid loss： {:.6f}， Time： {}".format(
-                    epoch+1, num_epochs, 
+                print("Epoch: {}， Train acc： {:.6f}， Train loss： {:.6f}， Valid acc： {:.6f}， Valid loss： {:.6f}， Time： {}".format(
+                    epoch, 
                     train_acc_, train_loss_,
                     valid_acc_, valid_loss_,cost_time))
                 print('================================================================================================================================')
@@ -1158,13 +1062,13 @@ class CBMIR():
             import matplotlib.pyplot as plt
             from matplotlib.ticker import MaxNLocator
             #print(training_accuracy,valid_accuracy)
-            plt.plot(range(1, num_epochs+1),training_accuracy, label='Train Accuracy')
-            plt.plot(range(1, num_epochs+1),valid_accuracy, label='Test Accuracy')
-            plt.plot(range(1, num_epochs+1),auc, label='auc')
-            plt.plot(range(1, num_epochs+1),specificity, label='specificity')
-            plt.plot(range(1, num_epochs+1),sensitivity, label='sensitivity')
-            plt.plot(range(1, num_epochs+1),ppv, label='ppv')
-            plt.plot(range(1, num_epochs+1),npv, label='npv')
+            plt.plot(range(1, num_epochs),training_accuracy, label='Train Accuracy')
+            plt.plot(range(1, num_epochs),valid_accuracy, label='Test Accuracy')
+            plt.plot(range(1, num_epochs),auc, label='auc')
+            plt.plot(range(1, num_epochs),specificity, label='specificity')
+            plt.plot(range(1, num_epochs),sensitivity, label='sensitivity')
+            plt.plot(range(1, num_epochs),ppv, label='ppv')
+            plt.plot(range(1, num_epochs),npv, label='npv')
             plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
             plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
             # 設定 X 軸標籤
@@ -1185,13 +1089,13 @@ class CBMIR():
             # 畫出訓練準確率和測試準確率的折線圖
             import matplotlib.pyplot as plt
             from matplotlib.ticker import MaxNLocator
-            plt.plot(range(1, num_epochs+1),training_accuracy, label='Train Accuracy')
-            plt.plot(range(1, num_epochs+1),valid_accuracy, label='Test Accuracy')
-            plt.plot(range(1, num_epochs+1),auc, label='auc')
-            plt.plot(range(1, num_epochs+1),specificity, label='specificity')
-            plt.plot(range(1, num_epochs+1),sensitivity, label='sensitivity')
-            # plt.plot(range(1, num_epochs+1),ppv, label='ppv')
-            # plt.plot(range(1, num_epochs+1),npv, label='npv')
+            plt.plot(range(1, num_epochs),training_accuracy, label='Train Accuracy')
+            plt.plot(range(1, num_epochs),valid_accuracy, label='Test Accuracy')
+            plt.plot(range(1, num_epochs),auc, label='auc')
+            plt.plot(range(1, num_epochs),specificity, label='specificity')
+            plt.plot(range(1, num_epochs),sensitivity, label='sensitivity')
+            # plt.plot(range(1, num_epochs),ppv, label='ppv')
+            # plt.plot(range(1, num_epochs),npv, label='npv')
             plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
             plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
             # 設定 X 軸標籤
@@ -2550,7 +2454,7 @@ for i in range(1):
     cb.repeat_times = i
     cb.save_path="early_stop_test"+str(i)
     cb.train_typee = ['finetune']
-    cb.model_listt=['swin_vit']
+    cb.model_listt=['swin_vit','vit','densenet']
     cb.path_listt=['S']
     cb.num_epochs =9999
     cb.batch_size = 16
