@@ -477,7 +477,6 @@ class CBMIR():
             CUDA = torch.cuda.is_available()
             device = torch.device("cuda" if CUDA else "cpu")
             early_stopping = EarlyStopping(patience=5, delta=0.01, path='save.pth')
-
             optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
             #scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
