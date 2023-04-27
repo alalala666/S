@@ -459,11 +459,13 @@ class CBMIR():
             npv = []
             CUDA = torch.cuda.is_available()
             device = torch.device("cuda" if CUDA else "cpu")
-            early_stopping = EarlyStopping(patience=10, delta=0.00001, path='save.pth')
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+            early_stopping = EarlyStopping(patience=10, delta=0.0001, path='save.pth')
+            #optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4)
 
             #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+            #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
             # Train model
             for epoch in range(1,9999):
                 # training
@@ -525,7 +527,7 @@ class CBMIR():
                 #寫入訓練資料
 
                 early_stopping(valid_loss_, model)
-                scheduler.step(valid_loss_)
+                scheduler.step()
                 print("Early stopping",epoch,early_stopping.early_stop)
                 if early_stopping.early_stop:
                     print("Early stopping",epoch)
@@ -720,7 +722,7 @@ class CBMIR():
 
             lr = 0.01 #* (1/2)
 
-            optimizer = optim.SGD(model.parameters(), lr= lr)
+            #optimizer = optim.SGD(model.parameters(), lr= lr)
             # from torch.optim.lr_scheduler import StepLR
             # scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
             # 定义损失函数和优化器
